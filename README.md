@@ -28,15 +28,14 @@ There are two ways to use it, both hitting the same backend:
 
 Behind both of them:
 
-1. The file(s) get uploaded straight to **Supabase Storage** from the
-   browser or the script — never through the backend function itself.
-2. A small JSON message (receiver, subject, body, and pointers to the
-   uploaded files) goes to a **Vercel serverless function**.
-3. That function checks rate limits and a daily send cap against a
+1. The client requests a unique upload session ID from `/api/create-session`.
+2. The file(s) get uploaded straight to **Supabase Storage** under `sessions/<sessionId>/` from the browser or the script — never through the backend function itself.
+3. A small JSON message (`{ sessionId, receiver, subject, body }`) goes to a **Vercel serverless function** (`/api/send`).
+4. That function checks rate limits and a daily send cap against a
    **Supabase** table, downloads the file(s) back out of storage, attaches
    them to an email, and sends it through Gmail's SMTP server using a
    spare Gmail account's App Password.
-4. It logs the send, then deletes the temporary files from storage.
+5. It logs the send, then deletes the temporary files from storage.
 
 The Gmail credentials and the Supabase service key only ever live in
 Vercel's environment variables — never in this repo, never on whatever
