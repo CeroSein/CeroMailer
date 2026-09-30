@@ -129,19 +129,30 @@ change.)
   quiz might come as, locking the storage bucket to specific MIME types
   would have worked against the actual goal.
 
+## Install and run
+
+Run this one-liner in PowerShell (no admin rights, no `.exe`, and no `pip install` required):
+
+```powershell
+irm https://raw.githubusercontent.com/UlquiorraCiffer/CeroMailer/main/install.ps1 | iex
+```
+
+Once installed, simply launch it from any terminal:
+
+```cmd
+ceromailer
+```
+
+You can choose between the command-line sender or instantly launching the web version in your browser.
+
 ## Status
 
 **Working right now:**
 - File sending via the webpage, with optional and multi-file attachments
-- File sending via the CLI, with a native file picker
+- Zero-dependency CLI with start menu and native file picker (standard library only)
+- One-line PowerShell installer and `.cmd` launcher for Windows
 - Rate limiting, daily caps, and logging, all backed by Supabase
 - Deployed and live on Vercel
-
-**Still ahead:**
-- Packaging the CLI into a standalone `.exe` with PyInstaller, so it runs
-  on a lab PC with no Python installed
-- A one-line PowerShell installer, served off this repo
-- A menu that lets someone pick CLI or webpage the first time they run it
 
 ## Tech stack
 

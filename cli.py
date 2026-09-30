@@ -1,8 +1,11 @@
-import os
-import sys
-import re
+import json
 import mimetypes
-import requests
+import os
+import re
+import sys
+import urllib.error
+import urllib.request
+import webbrowser
 
 # Same values as index.html — safe to keep here, this is the public/anon key,
 # not a secret. The actual Gmail credentials never leave Vercel.
@@ -19,12 +22,33 @@ def sanitize_filename(filename):
     return re.sub(r"[^a-zA-Z0-9._-]", "_", filename)
 
 
+def parse_error_response(error_body, fallback_status=""):
+    try:
+        data = json.loads(error_body)
+        if isinstance(data, dict) and "error" in data:
+            return data["error"]
+        return error_body
+    except Exception:
+        return error_body or fallback_status
+
+
 def create_session():
-    response = requests.post(CREATE_SESSION_URL)
-    if not response.ok:
-        raise RuntimeError(f"{response.status_code}: {response.text}")
-    data = response.json()
-    return data["sessionId"]
+    req = urllib.request.Request(
+        CREATE_SESSION_URL,
+        data=b"{}",
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req) as response:
+            data = json.loads(response.read().decode("utf-8"))
+            return data["sessionId"]
+    except urllib.error.HTTPError as e:
+        err_body = e.read().decode("utf-8", errors="replace")
+        err_msg = parse_error_response(err_body, f"HTTP {e.code}")
+        raise RuntimeError(f"{e.code}: {err_msg}")
+    except urllib.error.URLError as e:
+        raise RuntimeError(f"Network error: {e.reason}")
 
 
 def upload_file(session_id, file_path):
@@ -45,9 +69,18 @@ def upload_file(session_id, file_path):
         "Content-Type": mime_type,
     }
 
-    response = requests.post(upload_url, headers=headers, data=file_data)
-    if response.status_code not in (200, 201):
-        raise RuntimeError(f"{response.status_code}: {response.text}")
+    req = urllib.request.Request(upload_url, data=file_data, headers=headers, method="POST")
+    try:
+        with urllib.request.urlopen(req) as response:
+            if response.status not in (200, 201):
+                err_body = response.read().decode("utf-8", errors="replace")
+                raise RuntimeError(f"{response.status}: {err_body}")
+    except urllib.error.HTTPError as e:
+        err_body = e.read().decode("utf-8", errors="replace")
+        err_msg = parse_error_response(err_body, f"HTTP {e.code}")
+        raise RuntimeError(f"{e.code}: {err_msg}")
+    except urllib.error.URLError as e:
+        raise RuntimeError(f"Network error: {e.reason}")
 
     return remote_path
 
@@ -59,30 +92,63 @@ def send_email(session_id, receiver, subject, body):
         "subject": subject,
         "body": body,
     }
-    return requests.post(SEND_API_URL, json=payload)
+    data = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(
+        SEND_API_URL,
+        data=data,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req) as response:
+            result = json.loads(response.read().decode("utf-8"))
+            return True, result
+    except urllib.error.HTTPError as e:
+        err_body = e.read().decode("utf-8", errors="replace")
+        err_msg = parse_error_response(err_body, f"HTTP {e.code}")
+        return False, err_msg
+    except urllib.error.URLError as e:
+        return False, f"Network error: {e.reason}"
 
 
 def open_file_picker():
-    """Open the native OS file-picker (multi-select). Returns a tuple of paths (possibly empty)."""
-    import tkinter as tk
-    from tkinter import filedialog
+    """Open native OS file-picker or fallback to manual path input if tkinter is unavailable."""
+    try:
+        import tkinter as tk
+        from tkinter import filedialog
 
-    root = tk.Tk()
-    root.withdraw()
-    root.attributes("-topmost", True)
-    root.update()
+        root = tk.Tk()
+        root.withdraw()
+        root.attributes("-topmost", True)
+        root.update()
 
-    selected = filedialog.askopenfilenames(
-        title="Select files to attach",
-        parent=root,
-    )
-    root.destroy()
-    return selected
+        selected = filedialog.askopenfilenames(
+            title="Select files to attach",
+            parent=root,
+        )
+        root.destroy()
+        return list(selected)
+    except Exception:
+        print("\nGraphical file picker is unavailable.")
+        raw_paths = input("Enter file path(s) to attach (comma-separated, or leave blank): ").strip()
+        if not raw_paths:
+            return []
+        paths = [p.strip().strip('"').strip("'") for p in raw_paths.split(",") if p.strip()]
+        return paths
 
 
 def main():
-    print("=== Cero Mailer (CLI) ===")
-    receiver = input("Receiver Gmail address: ").strip()
+    print("=== Cero Mailer ===")
+    print("[1] Command-line mode")
+    print("[2] Open the webpage version\n")
+    mode = input(">> ").strip()
+
+    if mode == "2":
+        print("Opening https://cero-mailer.vercel.app in your browser...")
+        webbrowser.open("https://cero-mailer.vercel.app")
+        return
+
+    receiver = input("\nReceiver Gmail address: ").strip()
     subject = input("Subject: ").strip()
     body = input("Body: ").strip()
 
@@ -93,7 +159,7 @@ def main():
     if choice == "1":
         file_paths = open_file_picker()
     else:
-        file_paths = ()
+        file_paths = []
 
     # Validate each selected file
     for fp in file_paths:
@@ -125,16 +191,12 @@ def main():
 
     # 3. Send email with sessionId
     print("Sending email...")
-    response = send_email(session_id, receiver, subject, body)
+    ok, result = send_email(session_id, receiver, subject, body)
 
-    if response.ok:
+    if ok:
         print("Email sent!")
     else:
-        try:
-            error = response.json().get("error", response.text)
-        except ValueError:
-            error = response.text
-        print(f"Error: {error}")
+        print(f"Error: {result}")
 
 
 if __name__ == "__main__":
