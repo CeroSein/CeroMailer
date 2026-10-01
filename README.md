@@ -134,7 +134,7 @@ change.)
 Run this one-liner in PowerShell (no admin rights, no `.exe`, and no `pip install` required):
 
 ```powershell
-irm https://raw.githubusercontent.com/UlquiorraCiffer/CeroMailer/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/CeroSein/CeroMailer/main/install.ps1 | iex
 ```
 
 Once installed, simply launch it from any terminal:
