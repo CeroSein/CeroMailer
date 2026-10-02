@@ -342,7 +342,7 @@ few safeguards are built in:
 On any PC with Python, open a normal (not admin) PowerShell window and run:
 
 ```powershell
-irm https://raw.githubusercontent.com/UlquiorraCiffer/CeroMailer/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/CeroSein/CeroMailer/main/install.ps1 | iex
 ```
 
 The installer:
